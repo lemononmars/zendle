@@ -1,0 +1,10 @@
+.DS_Store
+node_modules
+/.svelte-kit
+/package
+
+/.svelte
+/build
+/functions
+gh-pages.js
+removedupe.js
