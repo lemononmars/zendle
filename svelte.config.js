@@ -22,9 +22,8 @@ export default {
     }),
     target: '#svelte',
     paths: {
-      base: dev? '':'/thwordsearch',
-    },
-    appDir: 'app_'
+      base: dev? '':'/zendle',
+    }
   },
 
  

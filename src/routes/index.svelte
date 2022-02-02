@@ -5,36 +5,38 @@
 <script lang="ts">
   import Head from '$lib/Head.svelte'
   import Social from '$lib/Social.svelte'
-  import {search} from '$lib/search'
+  import ToggleTheme from '$lib/ToggleTheme.svelte'
+  import {verifyPattern} from '$lib/checker'
 
-  let query: string = ""
-  let start: number = 0
-  let input: string = query
-  const atHomePage: boolean = (!query)? true: false
-  let queryResults = search(query)
-  $: currentQueryResults = queryResults.results.slice(start, start + Math.min(100, queryResults.count-start))
-
-  const url = "https://lemononmars.github.io/thwordsearch"
-  const title = "TH Wordle Search"
-  const description = "Pattern-matching in Thai language"
+  const url = "https://lemononmars.github.io/zendle"
+  const title = "Zendle"
+  const description = "Deduction game"
   const imageUrl = ""
   const gtagId = "G-YTV7TZ3EMC"
 
-  let modalText: string = ""
-
-  const examples = [
-    ["มีตัวอักษรในตำแหน่งที่กำหนด","ส..น", "สงวน, สถาน, สุทัศน์, ..."],
-    //["ตัวอักษรบางตำแหน่งเป็นไปได้หลายแบบ", "กร?ะ..", "กระจก, กะได, ..."],
-    ["ขึ้นต้นด้วย สับ", "สับ*", "สับไก, สับราง, สับปะรด,..."],
-    ["มีตัวอักษรเรียงกันตามลำดับ", "*ธ*ท*", "กรีธาทัพ, ธรณีวิทยา, อิทธิบาท, ..."],
-    ["anagram ตัวอักษรทั้งหมด", "/กลม", "กมล, มกุล, มีลูก, ..."],
-    ["anagram ตัวอักษรทั้งหมด และเพิ่มอีกกี่ตัวก็ได้", "/กะลา*", "การละคร, เจาะลึก, เพาะปลูก, ..."],
-    ["มี 3-8 ตัวอักษร และมี ก ข ค", "3-8:/กขค*", "ขนมครก, คณะลูกขุน, คุกเข่า, ..."],
-    ["มีอย่างน้อย 12 ตัวอักษร และมี ปลา", "12-:*ปลา*", "กระต่ายแก่แม่ปลาช่อน, ..."],
-    ["มี 7 ตัวอักษร มี ม อยู่ตำแหน่งที่ 3 และมี ส ะ", "7:..ม* & /สะ*", "สามัตถิยะ, เหมาะสม, อัสมิมานะ"],
-    ["มี 11 ตัวอักษร และไม่มีสระในบรรทัด", "11:/* & ^ใเแโไาำะฤา", "กล้องจุลทรรศน์, ..."],
-    ["มี ฮ แต่ไม่ได้ขึ้นต้นด้วย ฮ", "/*ฮ & !ฮ*", "เก๊กฮวย, นกฮูก, เฮ, ..."]
+  const symbolString = ['❤','💛','💙','🔴','🟡','🔵','🟥','🟨','🟦']
+  const ruleStrings = [
+    ["No", "At least one", "Exactly one", "The number of"],
+    ["blue", "red", "yellow"],
+    ["heart", "circle", "square"],
+    ["is in the string", "is to the left of", "is to the right of", "is equal to", "is less than", "is more than"],
+    ["blue", "red", "yellow"],
+    ["heart", "circle", "square"],
   ]
+  let ruleColors = ["btn-primary", "btn-secondary","btn-accent","btn-info","btn-secondary","btn-accent"]
+  
+  let ruleSentence: number[] = [-1,-1,-1,-1,-1,-1]
+  $: ruleActive = ruleSentence.map((r,idx)=>selectedPrevious(idx))
+  
+  $: ruleSentenceString = ruleSentence.reduce((prev, r, idx)=>
+    prev + " " + (r==-1?"":ruleStrings[idx][r])
+  , "")
+
+  let input: number[] = []
+  let attempts: number[][] = []
+  $: inputSymbols = toSymbols(input).join("")
+
+  let gameEnded: boolean = false
 
   function onKeypress(e: KeyboardEvent){
     if (e.key === "Enter") {
@@ -44,92 +46,113 @@
   }
 
   function submit(){
-    if(!input)
-      alert("ใส่คำก่อนสิเอ้อ!")
-    else {
-      query = input
-      start = 0
-      queryResults = search(query)
+    if(input.length == 0)
+      return
+    attempts = [...attempts, input]
+    input = []
+  }
+
+  function toSymbols(s: number[]){
+    return s.map((id)=>symbolString[id])
+  }
+
+  function selectedPrevious(id: number){
+    switch(id){
+      case 0: return true;
+      case 1: 
+      case 2: return ruleSentence[0] >= 0;
+      case 3: return ruleSentence[1] + ruleSentence[2] > -2;
+      case 4:
+      case 5: return ruleSentence[3] >= 0;
+      default: break;
     }
+    return true
   }
 </script>
 
 <Head {title} {description} {url} {imageUrl} {gtagId} />
 
+<h1 class="text"> Zendle </h1>
 
 
+<div class="form-control">
+  {#each attempts as at}
+    <div class={`card card-bordered card-compact border-2 ${verifyPattern(at)?"border-green-400":"border-red-400"}`}>
+      <div class="card-body align-left">
+        <p>{`${toSymbols(at).join("")}`}</p>
+      </div>
+    </div> 
+  {/each}
+</div>
 
-<div class="flex flex-col justify-items-center text-center gap-2">
-  <h1 class="text-5xl font-extrabold mb-2">TH Wordle Search</h1>
-  <div class="flex flex-row justify-center gap-2">
-    <input
-      type="text"
-      class="input input-bordered text-xl"
-      on:keypress={onKeypress}
-      bind:value={input}
-      placeholder="พิมพ์รูปแบบที่นี่"
-    />
-    <button on:click={submit} class="btn btn-primary">
-      หา
-    </button>
-    <button on:click={()=>query=""} class="btn btn-secondary">
-      วิธีใช้
-    </button> 
-  </div>
+<div>
+  <input 
+    class="input w-full" 
+    disabled
+    bind:value={ruleSentenceString}
+  >
+</div>
 
-  <div class="overflow-x-auto">
-    {#if query}
-      {#if currentQueryResults.length > 0}
-        <span>แสดงผลลัพธ์ที่ {start+1} ถึง {Math.min(start+100, queryResults.count)} จาก {queryResults.count} คำ</span><br>
-        {#each currentQueryResults as qr}
-          <div data-tip="copy" class="tooltip">
-            <button class="btn btn-outline text-lg font-thin" on:click={()=>
-              navigator.clipboard.writeText(qr)
-            }>{qr}</button>
-          </div>
-        {/each}
-        <br>
-          <div class="btn-group items-center">
-            {#each Array(Math.floor(queryResults.count/100)+1) as _, idx}
-              <button class="btn" name="pageButtons" on:click={()=>{
-                start=idx*100;
-                window.scrollTo(0, 0)
-              }}>
-                {idx+1}
-              </button> 
-            {/each}
-          </div>
-      {:else}
-        <span>ไม่เจอรูปแบบ </span> <span class="text-red-400"> {query} </span> <span>ลองใหม่นะ</span>
+<div class="flex flex-row justify-center items-center gap-3">
+  {#each ruleStrings as rs, id1}
+    <div class="flex flex-col" class:opacity-25="{!ruleActive[id1]}">
+      {#each rs as s, id2}
+        <button 
+          class={`btn btn-xs ${ruleColors[id1]}`} 
+          class:btn-outline="{ruleSentence[id1] != id2}"
+          on:click={()=>{
+            if(ruleSentence[id1] == id2) 
+              ruleSentence = ruleSentence.fill(-1,id1)
+            else
+              ruleSentence[id1] = id2
+          }}
+        >{s}</button>
+      {/each}
+    </div>
+  {/each}
+  <button class="btn btn-lg">Submit</button>
+</div>
+
+<div>
+  <input 
+    class="input" 
+    disabled
+    bind:value={inputSymbols}
+  >
+</div>
+
+<div class="flex flex-row justify-center">
+  <div class="gap-2">
+    {#each symbolString as s, idx}
+      <button class="btn bth-outline text-xl w-30 h-10" on:click={()=>{
+        input = [...input, idx]
+      }}>
+        {s}</button
+      >
+      {#if idx % 3 == 2}
+      <br>
       {/if}
-    {:else}
-      <table class="table table-compact table-zebra w-full lg:table-normal">
-        <thead>
-          <tr>
-            <th>ถ้าอยากหาคำที่...</th>
-            <th>...ให้ใส่...</th>
-            <th>...จะได้</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each examples as [desc, ip, result]}
-          <tr>
-            <td>{desc}</td>
-            <td><div data-tip="ลองเลย" class="tooltip">
-              <button class='btn btn-info btn-block text-sm font-normal lg:text-xl' on:click={()=>input=ip}>{ip}</button>
-              </div></td>
-            <td>{result}</td>
-          </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
+    {/each}
+    <button class="btn input-secondary" on:click={()=>{
+      input = []
+    }}>
+      Clear</button
+    >
+    <button class="btn bth-outline" on:click={()=>{
+      input.pop()
+    }}>
+      Back</button
+    >
+    <button class="btn input-primary" on:click={submit}>
+      Submit</button
+    >
   </div>
 </div>
 
+<ToggleTheme/>
 <footer class="p-4 footer bg-base-300 text-base-content footer-center">
   <div class="flex flex-row justify-center">
-    <a href="https://github.com/lemononmars/thwordsearch" target="_blank" class="link link-primary">Github</a>
+    <a href="https://github.com/lemononmars/zendle" target="_blank" class="link link-primary">Github</a>
     <a href="https://twitter.com/SakulbuthE" target="_blank" class="link link-primary">เสนอแนะ/แจ้งบัค</a>
   <Social {url} {title} {description}/>
   </div>
