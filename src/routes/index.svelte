@@ -6,7 +6,9 @@
   import Head from '$lib/Head.svelte'
   import Social from '$lib/Social.svelte'
   import ToggleTheme from '$lib/ToggleTheme.svelte'
-  import {verifyPattern} from '$lib/checker'
+  import {getTodaysRule, ruleStrings, compareRules} from '$lib/Rulebook'
+  import {verifyPattern} from '$lib/Checker'
+  import { fade, fly } from 'svelte/transition';
 
   const url = "https://lemononmars.github.io/zendle"
   const title = "Zendle"
@@ -14,111 +16,127 @@
   const imageUrl = ""
   const gtagId = "G-YTV7TZ3EMC"
 
-  const symbolString = ['❤','💛','💙','🔴','🟡','🔵','🟥','🟨','🟦']
-  const ruleStrings = [
-    ["No", "At least one", "Exactly one", "The number of"],
-    ["blue", "red", "yellow"],
-    ["heart", "circle", "square"],
-    ["is in the string", "is to the left of", "is to the right of", "is equal to", "is less than", "is more than"],
-    ["blue", "red", "yellow"],
-    ["heart", "circle", "square"],
-  ]
-  let ruleColors = ["btn-primary", "btn-secondary","btn-accent","btn-info","btn-secondary","btn-accent"]
+  const symbolString = ['🔴','🟡','🔵','🟥','🟨','🟦']//'❤','💛','💙',
+  const verifiedSymbol = ['❌','✔️']
+
+  let ruleColors = ["btn-primary", "btn-secondary","btn-accent","btn-info","btn-secondary","btn-accent", "btn-info"]
   
-  let ruleSentence: number[] = [-1,-1,-1,-1,-1,-1]
-  $: ruleActive = ruleSentence.map((r,idx)=>selectedPrevious(idx))
   
-  $: ruleSentenceString = ruleSentence.reduce((prev, r, idx)=>
-    prev + " " + (r==-1?"":ruleStrings[idx][r])
+  let ruleGuess: number[] = [-1,-1,-1,-1,-1,-1,-1]
+  // display only rules that are in the next part, and that will be grammatical
+  $: availableRule = ruleGuess.map((t,tidx)=>
+    ruleStrings[tidx].map((s, sidx) => 
+      checkedAvailableRule(tidx,sidx)
+    )
+  )
+  $: ruleGuessString = ruleGuess.reduce((prev, r, idx)=>
+    prev + (r==-1?"": " " + ruleStrings[idx][r])
   , "")
 
+  // February 4, 2022 Game Epoch
+  const epochMs = 1643907600000
+  const now = Date.now()
+  const msInDay = 86400000
+  const dateIndex = Math.floor((now - epochMs) / msInDay)
+  let ruleSolution = getTodaysRule(dateIndex)
+  $: ruleSolutionString = ruleSolution.reduce((prev, r, idx)=>
+    prev + (r==-1?"": " " + ruleStrings[idx][r])
+  , "")
+
+  type display = number[] | string
   let input: number[] = []
-  let attempts: number[][] = []
-  $: inputSymbols = toSymbols(input).join("")
-
+  let attempts: Array<display> = []
+  let validation: boolean[] = []
+  $: inputSymbols = toSymbolString(input)
   let gameEnded: boolean = false
-
-  function onKeypress(e: KeyboardEvent){
-    if (e.key === "Enter") {
-      e.preventDefault()
-      submit()
-    }
-  }
 
   function submit(){
     if(input.length == 0)
       return
     attempts = [...attempts, input]
+    validation = [...validation, verifyPattern(input, ruleSolution)]
     input = []
   }
 
-  function toSymbols(s: number[]){
-    return s.map((id)=>symbolString[id])
+  function toSymbolString(s: display): string{
+    if (typeof s === "string")
+      return s +"."
+    else
+      return s.map((id)=>symbolString[id]).join("")
   }
 
-  function selectedPrevious(id: number){
-    switch(id){
+  function toSymbolStringShare(s: display): string{
+    let str = verifiedSymbol[+verifyPattern(s, ruleSolution)] +  ":"
+    if (typeof s === "string")
+      str += s + "."
+    else
+      str += s.map((id)=>symbolString[id]).join("")
+    return str
+  }
+
+  function checkedAvailableRule(type: number, id: number): boolean{
+    switch(type){
       case 0: return true;
-      case 1: 
-      case 2: return ruleSentence[0] >= 0;
-      case 3: return ruleSentence[1] + ruleSentence[2] > -2;
-      case 4:
-      case 5: return ruleSentence[3] >= 0;
+      case 1: return ruleGuess[0] == 0
+      case 2: 
+      case 3: return ruleGuess[0] == 1 || ruleGuess[1] >= 0;
+      case 4: return (ruleGuess[2] >=0 || ruleGuess[3] >= 0) &&(
+        (ruleGuess[0] == 0 && id == 0)
+        || (ruleGuess[0] == 1 && id >= 1)
+      );
+      case 5:
+      case 6: return ruleGuess[4] >= 0;
       default: break;
     }
     return true
+  }
+
+  function guessTheRule(){
+    if(compareRules(ruleGuess, ruleSolution)){
+      attempts = [...attempts, ruleGuessString]
+      ruleGuess = ruleGuess.fill(-1)
+      return
+    }
+    gameEnded = true
+  }
+
+  function copyResult() {
+    const results = attempts.map((at)=>toSymbolStringShare(at)).join("\n")
+      + "\n\nCan you guess the rule?"
+
+    navigator.clipboard.writeText(
+      `#Zendle Day ${dateIndex + 1} (${attempts.length} attempts)\n\n${results}`
+    )
   }
 </script>
 
 <Head {title} {description} {url} {imageUrl} {gtagId} />
 
-<h1 class="text"> Zendle </h1>
+<h1 class="text"> Zendle: Day {dateIndex+1} </h1>
 
+<span>{ruleSolutionString}</span>
 
-<div class="form-control">
-  {#each attempts as at}
-    <div class={`card card-bordered card-compact border-2 ${verifyPattern(at)?"border-green-400":"border-red-400"}`}>
-      <div class="card-body align-left">
-        <p>{`${toSymbols(at).join("")}`}</p>
+<div class="form-control overflow-y-auto flex flex-col items-center w-full">
+  {#each attempts as at, idx}
+    <div class={`card card-bordered card-compact w-full lg:w-1/2 border-2 ${validation[idx]?"border-green-400":"border-red-400"}`}>
+      <div class="card-body align-left h-12">
+        <p>{`${toSymbolString(at)}`}</p>
       </div>
     </div> 
   {/each}
-</div>
-
-<div>
-  <input 
-    class="input w-full" 
-    disabled
-    bind:value={ruleSentenceString}
-  >
-</div>
-
-<div class="flex flex-row justify-center items-center gap-3">
-  {#each ruleStrings as rs, id1}
-    <div class="flex flex-col" class:opacity-25="{!ruleActive[id1]}">
-      {#each rs as s, id2}
-        <button 
-          class={`btn btn-xs ${ruleColors[id1]}`} 
-          class:btn-outline="{ruleSentence[id1] != id2}"
-          on:click={()=>{
-            if(ruleSentence[id1] == id2) 
-              ruleSentence = ruleSentence.fill(-1,id1)
-            else
-              ruleSentence[id1] = id2
-          }}
-        >{s}</button>
-      {/each}
-    </div>
-  {/each}
-  <button class="btn btn-lg">Submit</button>
-</div>
-
-<div>
-  <input 
-    class="input" 
-    disabled
-    bind:value={inputSymbols}
-  >
+  {#if gameEnded}
+    <div class={`card card-bordered card-compact w-full lg:w-1/2 border-2 bg-green-900`}>
+      <div class="card-body align-left h-12">
+        <p>{ruleGuessString}.</p>
+      </div>
+    </div> 
+  {:else}
+    <div class={`card card-bordered card-compact w-full lg:w-1/2 border-2 border-white-700 bg-gray-700`}>
+      <div class="card-body align-left h-12">
+        <p>{inputSymbols}</p>
+      </div>
+    </div> 
+  {/if}
 </div>
 
 <div class="flex flex-row justify-center">
@@ -133,27 +151,64 @@
       <br>
       {/if}
     {/each}
-    <button class="btn input-secondary" on:click={()=>{
-      input = []
-    }}>
-      Clear</button
-    >
-    <button class="btn bth-outline" on:click={()=>{
-      input.pop()
-    }}>
-      Back</button
-    >
-    <button class="btn input-primary" on:click={submit}>
-      Submit</button
-    >
+    {#if gameEnded}
+      <button class="btn input-secondary" on:click={copyResult}>
+        Share</button
+      >
+    {:else}
+      <button class="btn input-secondary" on:click={()=>{
+        input = []
+      }}>
+        Clear</button
+      >
+      <button class="btn input-primary" on:click={submit}>
+        Submit</button
+      >
+    {/if}
   </div>
 </div>
 
-<ToggleTheme/>
-<footer class="p-4 footer bg-base-300 text-base-content footer-center">
+{#if !gameEnded}
+  <label for="my-modal-2" class="btn btn-primary modal-button">Guess the rule!</label> 
+{/if}
+<input type="checkbox" id="my-modal-2" class="modal-toggle"> 
+<div class="modal w-auto">
+  <div class="modal-box"> 
+    <div class="flex flex-col justify-center items-center gap-3">
+      {#each ruleStrings as rs, tidx}
+        <div class="flex flex-row">
+          {#each rs as s, id}
+            <button 
+              class="btn btn-xs {ruleColors[tidx]}" 
+              class:btn-outline="{ruleGuess[tidx] != id}"
+              class:opacity-25="{!availableRule[tidx][id]}"
+              class:btn-disabled="{!availableRule[tidx][id]}"
+              on:click={()=>{
+                if(ruleGuess[tidx] == id) 
+                  ruleGuess = ruleGuess.fill(-1,tidx)
+                else
+                  ruleGuess[tidx] = id
+              }}
+            >{s}</button>
+          {/each}
+        </div>
+      {/each}
+    </div>
+    <span>{ruleGuessString}</span>
+    <div class="modal-action flex-row justify-center">
+      <label for="my-modal-2" class="btn btn-primary" on:click={guessTheRule}>Submit</label> 
+      <button class="btn btn-info" on:click={()=>{ruleGuess = ruleGuess.fill(-1)}}>Reset</button>
+      <label for="my-modal-2" class="btn">Back</label>
+    </div>
+  </div>
+</div>
+
+
+<footer class="p-4 footer  text-base-content bg-base-300 dark:bg-base-800 footer-center">
   <div class="flex flex-row justify-center">
     <a href="https://github.com/lemononmars/zendle" target="_blank" class="link link-primary">Github</a>
     <a href="https://twitter.com/SakulbuthE" target="_blank" class="link link-primary">เสนอแนะ/แจ้งบัค</a>
-  <Social {url} {title} {description}/>
+    <Social {url} {title} {description}/>
+    <!--ToggleTheme/> <-->
   </div>
 </footer>
