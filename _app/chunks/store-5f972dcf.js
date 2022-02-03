@@ -1,1 +1,0 @@
-import{D as a}from"./vendor-bd055390.js";function n(t,r){const o=typeof localStorage!="undefined"?localStorage.getItem(t):null,e=a(r);return o!==null&&e.set(o),e.subscribe(l=>{typeof localStorage!="undefined"&&localStorage.setItem(t,l)}),e}n("theme","dark");
